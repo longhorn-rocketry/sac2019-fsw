@@ -16,10 +16,11 @@ void setup() {
   hist.add(5);
   test("hs3", hist.at_capacity(), true);
   test("hs4", hist.mean(), 4);
-  test("hs5", hist.mean(), 0.816);
+  test("hs5", hist.stdev(), 0.816);
   hist.add(6);
-  test("hs6", hist[2], 6);
-  test("hs6", hist[0], 4);
+  test("hs6", hist.at_capacity(), true);
+  test("hs7", hist[2], 6);
+  test("hs8", hist[0], 4);
   float end = millis() / 1000.0;
   Serial.printf("%f s elapsed\n", end - start);
 
@@ -30,12 +31,12 @@ void setup() {
   int id0 = heap.add_block(4);
   int id1 = heap.add_block(2);
   heap.logc(id0, 9.807);
-  heap.logc(id0, -3.142);
+  heap.logc(id0, -3.141);
   heap.logc(id1, 2.718);
   float *arr0 = heap.decompress(0, 4);
   float *arr1 = heap.decompress(4, 6);
   test("hp0", arr0[0], 9.807);
-  test("hp1", arr0[1], -3.142);
+  test("hp1", arr0[1], -3.141);
   test("hp2", arr1[0], 2.718);
   end = millis() / 1000.0;
   Serial.printf("%f s elapsed\n", end - start);
