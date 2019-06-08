@@ -15,8 +15,8 @@ void TorchyBarometer::initialize() {
 }
 
 void TorchyBarometer::update() {
-  // Second highest level of sampling precision for the BMP180 API, only causes
-  // ~14 ms delay in reading
+  // Second highest level of sampling precision for the BMP180, only causes
+  // ~14 ms delay in reading according to API
   const char PRESSURE_OVERSAMPLING = 2;
 
   double p, t;
@@ -40,4 +40,8 @@ void TorchyBarometer::update() {
     data.temperature = t;
     data.altitude = baro.altitude(p, ground_pressure);
   }
+}
+
+float TorchyBarometer::get_ground_pressure() {
+  return ground_pressure;
 }

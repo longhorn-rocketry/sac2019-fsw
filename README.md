@@ -26,6 +26,7 @@ I'll tell you hwhat, space cowboy.
 
 * [Teensyduino](https://www.pjrc.com/teensy/teensyduino.html)
 * [Photonic](https://github.com/longhorn-rocketry/photonic)
+* [Aimbot](https://github.com/longhorn-rocketry/aimbot)
 * [Adafruit Unified Sensor Driver](https://github.com/adafruit/Adafruit_Sensor)
 * [BNO055 Driver](https://github.com/adafruit/Adafruit_BNO055)
 * [BMP085 Driver](https://github.com/sparkfun/BMP180_Breakout_Arduino_Library)
