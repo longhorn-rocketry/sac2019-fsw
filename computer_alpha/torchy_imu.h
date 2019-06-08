@@ -3,17 +3,22 @@
 
 #define AFS_SEL 0
 
-#include "Wire.h"
-
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
 #include <photonic.h>
+#include <Wire.h>
 
 using namespace photonic;
 
 class TorchyImu : public Imu {
 protected:
-  int16_t read16();
+  Adafruit_BNO055 *bno;
 
 public:
+  TorchyImu();
+
+  ~TorchyImu();
+
 	void initialize();
 
 	void update();

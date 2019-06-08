@@ -25,5 +25,7 @@ I'll tell you hwhat, space cowboy.
 ### Dependencies
 
 * [Teensyduino](https://www.pjrc.com/teensy/teensyduino.html)
-* [Adafruit BMP085 Library](https://github.com/adafruit/Adafruit-BMP085-Library)
 * [Photonic](https://github.com/longhorn-rocketry/photonic)
+* [Adafruit Unified Sensor Driver](https://github.com/adafruit/Adafruit_Sensor)
+* [BNO055 Driver](https://github.com/adafruit/Adafruit_BNO055)
+* [BMP085 Driver](https://github.com/sparkfun/BMP180_Breakout_Arduino_Library)
