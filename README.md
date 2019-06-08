@@ -29,4 +29,4 @@ I'll tell you hwhat, space cowboy.
 * [Aimbot](https://github.com/longhorn-rocketry/aimbot)
 * [Adafruit Unified Sensor Driver](https://github.com/adafruit/Adafruit_Sensor)
 * [BNO055 Driver](https://github.com/adafruit/Adafruit_BNO055)
-* [BMP085 Driver](https://github.com/sparkfun/BMP180_Breakout_Arduino_Library)
+* [BMP180 Driver](https://github.com/sparkfun/BMP180_Breakout_Arduino_Library)
