@@ -1,11 +1,15 @@
 // STL redefinitions that Arduino can't build without
 namespace std {
   void __throw_bad_alloc() {
+  #ifdef GROUND_TEST
     Serial.println("Failed to allocate memory!");
+  #endif
   }
 
   void __throw_length_error(char const *e) {
+  #ifdef GROUND_TEST
     Serial.println("Bad vector length!");
+  #endif
   }
 }
 
@@ -24,6 +28,7 @@ namespace std {
 #define BZZR 15 // Buzzer OUTPUT
 #define AIRBRAKE_SERVO_MIN -1 // TODO
 #define AIRBRAKE_SERVO_MAX -1 // TODO
+#define GROUND_TEST // TODO: REMOVE BEFORE FLIGHT
 
 #include "torchy_imu.h"
 
@@ -50,10 +55,10 @@ const int HISTORY_SIZE = 10;
 history<float> vertical_accel_history(HISTORY_SIZE);
 
 // Rocket parameters
-float rocket_drag_coeff = -1; // TODO
+float rocket_drag_coeff = 0.46;
 float rocket_radius = 0.0762;
-float rocket_airbrake_area = -1; // TODO
-float rocket_dry_mass = -1; // TODO
+float rocket_airbrake_area = 0.0036;
+float rocket_dry_mass = 34.874;
 
 // Rocket state
 Metronome mtr_state_update(25); // 25 Hz
@@ -85,10 +90,26 @@ float alt_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
 float alt_filtered_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
 float velocity_filtered_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
 float pressure_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float *telemetry_blocks[] = {
+  accel_block,
+  accel_filtered_block,
+  brake_extension_block,
+  alt_min_block,
+  alt_max_block,
+  alt_block,
+  alt_filtered_block,
+  velocity_filtered_block,
+  pressure_block
+};
+const int TELEMETRY_BLOCKS = 9;
+const int TELEMETRY_BUFFER_SIZE =
+    TELEMETRY_LOGS_BEFORE_OFFLOAD * TELEMETRY_BLOCKS * 2; // 2 bytes per float16
 int telemetry_logs_made = 0;
 
 void setup() {
+#ifdef GROUND_TEST
   Serial.println("Initializing hardware...");
+#endif
 
   pinMode(LLC_OE, OUTPUT);
   pinMode(BNO055_INT, INPUT);
@@ -118,14 +139,18 @@ void setup() {
   bool success = accelerometer->initialize();
 
   if (!success) {
+  #ifdef GROUND_TEST
     Serial.println("FATAL: FAILED TO CONTACT IMU");
+  #endif
     chirp(3);
   }
 
   success = barometer->initialize();
 
   if (!success) {
+  #ifdef GROUND_TEST
     Serial.println("FATAL: FAILED TO CONTACT BAROMETER");
+  #endif
     chirp(3);
   }
 
@@ -139,7 +164,9 @@ void setup() {
   photonic_configure(ROCKET_TELEMETRY_HEAP, heap);
   photonic_configure(ROCKET_VERTICAL_ACCEL_HISTORY, &vertical_accel_history);
 
+#ifdef GROUND_TEST
   Serial.println("Computing ground pressure...");
+#endif
 
   // Compute ground pressure
   double sigma_p = 0;
@@ -150,7 +177,9 @@ void setup() {
   }
   p0 = sigma_p / n;
 
+#ifdef GROUND_TEST
   Serial.println("Initializing state estimator...");
+#endif
 
   // Kalman filter setup
   state_estimator.set_delta_t(mtr_state_update.get_wavelength());
@@ -158,7 +187,9 @@ void setup() {
   state_estimator.compute_kg(1000);
   state_estimator.set_initial_estimate(0, 0, 0);
 
+#ifdef GROUND_TEST
   Serial.println("Configuring airbrake controller...");
+#endif
 
   // Airbrake controller setup
   AirbrakeControllerConfiguration config;
@@ -166,8 +197,8 @@ void setup() {
   config.bounds_history_size = 20;
   config.enforce_bounds_history_size = true;
   config.regression_id = abc::REG_NONE;
-  config.bs_profile_velocity_min = -1; // TODO
-  config.bs_profile_velocity_max = -1; // TODO
+  config.bs_profile_velocity_min = 25;
+  config.bs_profile_velocity_max = 300;
   config.bs_profile_step_min = 0.075;
   config.bs_profile_step_max = 0.1;
   config.bs_profile_exp = -1;
@@ -186,7 +217,9 @@ void setup() {
   config.bsc_up_profile_exp = -1;
   aimbot = new AirbrakeController(config);
 
+#ifdef GROUND_TEST
   Serial.println("Setup complete. Waiting for liftoff.");
+#endif
   chirp(1);
 
   // Block until liftoff
@@ -208,7 +241,7 @@ void loop() {
                     barometer->get_temperature());
     float a = accelerometer->get_acc_z();
     float mtr_dt = mtr_state_update.get_dt();
-    float dt = mtr_dt == -1 ? mtr_state_update->get_wavelength() : mtr_dt;
+    float dt = mtr_dt == -1 ? mtr_state_update.get_wavelength() : mtr_dt;
     state_estimator.set_delta_t(dt);
     rocket_state = state_estimator.filter(s, a);
     telemetry_log.alt = s;
@@ -259,6 +292,7 @@ void loop() {
 
   // Telemetry logging
   if (mtr_record_telemetry.poll(t) && !event_apogee) {
+    // Write log values to block buffers
     int i = telemetry_logs_made;
     accel_block[i] = telemetry_log.accel;
     accel_filtered_block[i] = telemetry_log.accel_filtered;
@@ -270,9 +304,28 @@ void loop() {
     velocity_filtered_block[i] = telemetry_log.velocity_filtered;
     pressure_block[i] = telemetry_log.pressure;
     telemetry_logs_made++;
+
+    // Offload buffer to Beta
     if (telemetry_logs_made == TELEMETRY_LOGS_BEFORE_OFFLOAD) {
       telemetry_logs_made = 0;
-      // TODO: Offload telemetry to Beta
+      byte buffer[TELEMETRY_BUFFER_SIZE];
+      int buffer_ind = 0;
+
+      // Compress buffer contents to float16
+      for (int i = 0; i < TELEMETRY_BLOCKS; i++) {
+        float *block = telemetry_blocks[i];
+        for (int j = 0; j < TELEMETRY_LOGS_BEFORE_OFFLOAD; j++) {
+          float f = block[j];
+          float16 f16 = Float16Compressor::compress(f);
+          byte b0 = f16 & 0xFF, b1 = (f16 >> 8) & 0xFF;
+          buffer[buffer_ind] = b1;
+          buffer[buffer_ind + 1] = b0;
+          buffer_ind += 2;
+        }
+      }
+
+      // Send to Beta
+      Serial.write(buffer, TELEMETRY_BUFFER_SIZE);
     }
   }
 }
