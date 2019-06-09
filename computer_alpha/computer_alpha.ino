@@ -187,6 +187,8 @@ void loop() {
     acalc_data.drag_coefficient = rocket_drag_coeff;
     acalc_data.radius = rocket_radius;
     acalc_data.base_mass = rocket_dry_mass;
+    acalc_data.air_density = igl_density(barometer->get_pressure() * 100, // mb -> pascals
+                                         barometer->get_temperature() + 273.15); // C -> K
 
     // Compute minimum altitude curve
     float rad_big = sqrt(rocket_radius * rocket_radius +
