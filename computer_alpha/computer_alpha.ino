@@ -42,7 +42,6 @@ bool event_apogee = false;
 // Hardware interfaces
 Imu *accelerometer;
 Barometer *barometer;
-TelemetryHeap *heap;
 AirbrakeController *aimbot;
 Servo servo1, servo2, servo3, servo4, servo5;
 
@@ -61,6 +60,32 @@ Metronome mtr_state_update(25); // 25 Hz
 KalmanFilter state_estimator;
 matrix rocket_state(3, 1);
 float p0;
+
+// Telemetry
+TelemetryHeap *heap;
+Metronome mtr_record_telemetry(10); // 10 Hz
+struct TelemetryLog {
+  float accel;
+  float accel_filtered;
+  float brake_extension;
+  float alt_min;
+  float alt_max;
+  float alt;
+  float alt_filtered;
+  float velocity_filtered;
+  float pressure;
+} telemetry_log;
+const int TELEMETRY_LOGS_BEFORE_OFFLOAD = 50;
+float accel_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float accel_filtered_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float brake_extension_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float alt_min_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float alt_max_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float alt_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float alt_filtered_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float velocity_filtered_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+float pressure_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
+int telemetry_logs_made = 0;
 
 void setup() {
   Serial.println("Initializing hardware...");
@@ -93,14 +118,14 @@ void setup() {
   bool success = accelerometer->initialize();
 
   if (!success) {
-    Serial.println("FAILED TO CONNECT TO IMU");
+    Serial.println("FATAL: FAILED TO CONTACT IMU");
     chirp(3);
   }
 
   success = barometer->initialize();
 
   if (!success) {
-    Serial.println("FAILED TO CONNECT TO BAROMETER");
+    Serial.println("FATAL: FAILED TO CONTACT BAROMETER");
     chirp(3);
   }
 
@@ -182,7 +207,14 @@ void loop() {
                     barometer->get_pressure(),
                     barometer->get_temperature());
     float a = accelerometer->get_acc_z();
+    float mtr_dt = mtr_state_update.get_dt();
+    float dt = mtr_dt == -1 ? mtr_state_update->get_wavelength() : mtr_dt;
+    state_estimator.set_delta_t(dt);
     rocket_state = state_estimator.filter(s, a);
+    telemetry_log.alt = s;
+    telemetry_log.accel_filtered = rocket_state[2][0];
+    telemetry_log.alt_filtered = rocket_state[0][0];
+    telemetry_log.velocity_filtered = rocket_state[1][0];
   }
 
   // Airbrake control
@@ -214,12 +246,34 @@ void loop() {
     acalc_data.radius = rocket_radius;
     float alt_max = (float)vint.SimulateApogeeEuler(0.01, acalc_data);
 
+    telemetry_log.alt_min = alt_min;
+    telemetry_log.alt_max = alt_max;
+
     // Compute airbrake extension and update servo
     float extension = aimbot->update(t,
                                      rocket_velocity,
                                      alt_min,
                                      alt_max);
     set_airbrake_extension(extension);
+  }
+
+  // Telemetry logging
+  if (mtr_record_telemetry.poll(t) && !event_apogee) {
+    int i = telemetry_logs_made;
+    accel_block[i] = telemetry_log.accel;
+    accel_filtered_block[i] = telemetry_log.accel_filtered;
+    brake_extension_block[i] = telemetry_log.brake_extension;
+    alt_min_block[i] = telemetry_log.alt_min;
+    alt_max_block[i] = telemetry_log.alt_max;
+    alt_block[i] = telemetry_log.alt;
+    alt_filtered_block[i] = telemetry_log.alt_filtered;
+    velocity_filtered_block[i] = telemetry_log.velocity_filtered;
+    pressure_block[i] = telemetry_log.pressure;
+    telemetry_logs_made++;
+    if (telemetry_logs_made == TELEMETRY_LOGS_BEFORE_OFFLOAD) {
+      telemetry_logs_made = 0;
+      // TODO: Offload telemetry to Beta
+    }
   }
 }
 
@@ -232,15 +286,13 @@ void loop() {
 bool block_control() {
   if (!event_burnout) {
     event_burnout = check_for_burnout();
-    if (event_burnout) {
-      // TODO: something, probably nothing
-    }
+    if (event_burnout) {}
   }
 
   if (!event_apogee) {
     event_apogee = check_for_apogee();
     if (event_apogee) {
-      // TODO: send all telemetry to beta, retract airbrakes
+      set_airbrake_extension(0);
     }
   }
 
@@ -254,7 +306,11 @@ void update_sensors() {
   accelerometer->update();
   barometer->update();
 
-  vertical_accel_history.add(accelerometer->get_acc_z());
+  float accel = accelerometer->get_acc_z();
+  vertical_accel_history.add(accel);
+  telemetry_log.accel = accel;
+
+  telemetry_log.pressure = barometer->get_pressure();
 }
 
 /**
@@ -264,6 +320,7 @@ void set_airbrake_extension(float e) {
   int position = (int)(AIRBRAKE_SERVO_MIN +
       (AIRBRAKE_SERVO_MAX - AIRBRAKE_SERVO_MIN) * e);
   servo1.write(position); // TODO: servo1?
+  telemetry_log.brake_extension = e;
 }
 
 /**
