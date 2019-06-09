@@ -16,7 +16,7 @@ I'll tell you hwhat, space cowboy.
 #### Beta
 
 * Teensy 3.5, 4 kB ROM
-* Operates communication equipment
+* Operates GPS
 * Handles SD card IO
 * Redundant storage for telemetry packets received periodically from Alpha
 
@@ -28,5 +28,6 @@ I'll tell you hwhat, space cowboy.
 * [Photonic](https://github.com/longhorn-rocketry/photonic)
 * [Aimbot](https://github.com/longhorn-rocketry/aimbot)
 * [Adafruit Unified Sensor Driver](https://github.com/adafruit/Adafruit_Sensor)
+* [Adafruit GPS Driver](https://github.com/adafruit/Adafruit_GPS)
 * [BNO055 Driver](https://github.com/adafruit/Adafruit_BNO055)
-* [BMP180 Driver](https://github.com/sparkfun/BMP180_Breakout_Arduino_Library)
+* [BMP085 Driver](https://github.com/adafruit/Adafruit-BMP085-Library)

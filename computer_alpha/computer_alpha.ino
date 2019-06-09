@@ -9,12 +9,26 @@ namespace std {
   }
 }
 
-#include "torchy_barometer.h"
+#define LLC_OE 2 // Logic Level Converter enable pin OUTPUT
+#define BNO055_INT 16 // IMU interrupt pin INPUT
+#define BNO055_ADDR 17 // IMU address pin, set low to 0x28, high for 0x29 OUTPUT
+#define P1_L 21 // Ejection charge 1 OUTPUT
+#define P2_L 22 // Ejection charge 2 OUTPUT
+#define S1_l 3 // Servo 1 PWM OUTPUT
+#define S1_2 4 // OUTPUT
+#define S1_3 5 // OUTPUT
+#define S1_4 6 // OUTPUT
+#define S1_5 20 // OUTPUT
+#define STAT1 13 // Status LED 1 OUTPUT
+#define STAT2 14 // Status LED 2 OUTPUT
+#define BZZR 15 // Buzzer OUTPUT
+
 #include "torchy_imu.h"
 
 #include <aimbot.h>
 #include <memory>
 #include <photonic.h>
+#include <Servo.h>
 
 using namespace photonic;
 
@@ -24,10 +38,11 @@ bool event_burnout = false;
 bool event_apogee = false;
 
 // Hardware interfaces
-TorchyImu *accelerometer;
-TorchyBarometer *barometer;
+Imu *accelerometer;
+Barometer *barometer;
 TelemetryHeap *heap;
 AirbrakeController *aimbot;
+Servo servo1, servo2, servo3, servo4, servo5;
 
 // Data storage
 const int HISTORY_SIZE = 10;
@@ -43,14 +58,34 @@ float rocket_dry_mass = -1; // TODO
 Metronome mtr_state_update(25); // 25 Hz
 KalmanFilter state_estimator;
 matrix rocket_state(3, 1);
-float s0;
+float p0;
 
 void setup() {
   Serial.println("Initializing hardware...");
 
+  pinMode(LLC_OE, OUTPUT);
+  pinMode(BNO055_INT, INPUT);
+  pinMode(BNO055_ADDR, OUTPUT);
+  pinMode(STAT1, OUTPUT);
+  pinMode(STAT2, OUTPUT);
+  pinMode(BZZR, OUTPUT);
+  pinMode(P1_L, OUTPUT);
+  pinMode(P2_L, OUTPUT);
+
+  digitalWrite(LLC_OE, HIGH);
+  digitalWrite(BNO055_ADDR, LOW);
+  digitalWrite(P1_L, LOW);
+  digitalWrite(P2_L, LOW);
+
+  servo1.attach(S1_l);
+  servo2.attach(S1_2);
+  servo3.attach(S1_3);
+  servo4.attach(S1_4);
+  servo5.attach(S1_5);
+
   // Initialize hardware wrappers
   accelerometer = new TorchyImu();
-  barometer = new TorchyBarometer();
+  barometer = new BMP085Barometer();
   heap = new TelemetryHeap();
 
   accelerometer->initialize();
@@ -65,6 +100,17 @@ void setup() {
   photonic_configure(ROCKET_PRIMARY_BAROMETER, barometer);
   photonic_configure(ROCKET_TELEMETRY_HEAP, heap);
   photonic_configure(ROCKET_VERTICAL_ACCEL_HISTORY, &vertical_accel_history);
+
+  Serial.println("Computing ground pressure...");
+
+  // Compute ground pressure
+  double sigma_p = 0;
+  int n = 1000;
+  for(int i = 0; i < n; i++) {
+    barometer->update();
+    sigma_p += barometer->get_pressure();
+  }
+  p0 = sigma_p / n;
 
   Serial.println("Initializing state estimator...");
 
@@ -118,7 +164,7 @@ void loop() {
 
   // State estimation
   if (mtr_state_update.poll(t)) {
-    float s = hypso(barometer->get_ground_pressure(),
+    float s = hypso(p0,
                     barometer->get_pressure(),
                     barometer->get_temperature());
     float a = accelerometer->get_acc_z();
