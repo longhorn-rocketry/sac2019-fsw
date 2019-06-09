@@ -9,9 +9,9 @@ TorchyImu::~TorchyImu() {
     delete bno;
 }
 
-void TorchyImu::initialize() {
+bool TorchyImu::initialize() {
   bno = new Adafruit_BNO055(55); // Not sure why 55
-  bno->begin();
+  return bno->begin();
 }
 
 void TorchyImu::update() {

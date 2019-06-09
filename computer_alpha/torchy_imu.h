@@ -19,7 +19,7 @@ public:
 
   ~TorchyImu();
 
-	void initialize();
+	bool initialize();
 
 	void update();
 };

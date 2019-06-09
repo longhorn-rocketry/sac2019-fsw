@@ -22,6 +22,8 @@ namespace std {
 #define STAT1 13 // Status LED 1 OUTPUT
 #define STAT2 14 // Status LED 2 OUTPUT
 #define BZZR 15 // Buzzer OUTPUT
+#define AIRBRAKE_SERVO_MIN -1 // TODO
+#define AIRBRAKE_SERVO_MAX -1 // TODO
 
 #include "torchy_imu.h"
 
@@ -88,8 +90,19 @@ void setup() {
   barometer = new BMP085Barometer();
   heap = new TelemetryHeap();
 
-  accelerometer->initialize();
-  barometer->initialize();
+  bool success = accelerometer->initialize();
+
+  if (!success) {
+    Serial.println("FAILED TO CONNECT TO IMU");
+    chirp(3);
+  }
+
+  success = barometer->initialize();
+
+  if (!success) {
+    Serial.println("FAILED TO CONNECT TO BAROMETER");
+    chirp(3);
+  }
 
   // Configure backend
   photonic_configure(ROCKET_IGNITION_G_TRIGGER, 3.0); // 3 Gs
@@ -149,6 +162,7 @@ void setup() {
   aimbot = new AirbrakeController(config);
 
   Serial.println("Setup complete. Waiting for liftoff.");
+  chirp(1);
 
   // Block until liftoff
   wait_for_liftoff();
@@ -247,5 +261,23 @@ void update_sensors() {
   @brief sets the airbrakes to (e*100)% extension
 */
 void set_airbrake_extension(float e) {
-  // TODO
+  int position = (int)(AIRBRAKE_SERVO_MIN +
+      (AIRBRAKE_SERVO_MAX - AIRBRAKE_SERVO_MIN) * e);
+  servo1.write(position); // TODO: servo1?
+}
+
+/**
+  @brief bird time
+*/
+void chirp(int repeat) {
+  const int PITCH = 800;
+  const int ON_TIME = 100;
+  const int OFF_TIME = 100;
+
+  for (int x = 0; x < repeat; x++) {
+    tone(BZZR, PITCH);
+    delay(ON_TIME);
+    noTone(BZZR);
+    delay(OFF_TIME);
+  }
 }
