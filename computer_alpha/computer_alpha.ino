@@ -13,6 +13,7 @@ namespace std {
   }
 }
 
+#define TELEMETRY_SERIAL Serial1 // Serial line that Beta listens on
 #define LLC_OE 2 // Logic Level Converter enable pin OUTPUT
 #define BNO055_INT 16 // IMU interrupt pin INPUT
 #define BNO055_ADDR 17 // IMU address pin, set low to 0x28, high for 0x29 OUTPUT
@@ -29,6 +30,9 @@ namespace std {
 #define AIRBRAKE_SERVO_MIN -1 // TODO
 #define AIRBRAKE_SERVO_MAX -1 // TODO
 #define GROUND_TEST // TODO: REMOVE BEFORE FLIGHT
+
+#define TELEMETRY_TOKEN_READINGS (byte)0
+#define TELEMETRY_TOKEN_TIMESTAMPS (byte)1
 
 #include "torchy_imu.h"
 
@@ -51,7 +55,7 @@ AirbrakeController *aimbot;
 Servo servo1, servo2, servo3, servo4, servo5;
 
 // Data storage
-const int HISTORY_SIZE = 10;
+const int HISTORY_SIZE = 20;
 history<float> vertical_accel_history(HISTORY_SIZE);
 
 // Rocket parameters
@@ -65,10 +69,11 @@ Metronome mtr_state_update(25); // 25 Hz
 KalmanFilter state_estimator;
 matrix rocket_state(3, 1);
 float p0;
+float launchpad_altitude = 1293.876; // SL altitude of Truth or Consequences, NM
 
 // Telemetry
 TelemetryHeap *heap;
-Metronome mtr_record_telemetry(10); // 10 Hz
+Metronome mtr_record_telemetry(20); // 20 Hz
 struct TelemetryLog {
   float accel;
   float accel_filtered;
@@ -80,7 +85,7 @@ struct TelemetryLog {
   float velocity_filtered;
   float pressure;
 } telemetry_log;
-const int TELEMETRY_LOGS_BEFORE_OFFLOAD = 50;
+const int TELEMETRY_LOGS_BEFORE_OFFLOAD = 100;
 float accel_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
 float accel_filtered_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
 float brake_extension_block[TELEMETRY_LOGS_BEFORE_OFFLOAD];
@@ -163,6 +168,7 @@ void setup() {
   photonic_configure(ROCKET_PRIMARY_BAROMETER, barometer);
   photonic_configure(ROCKET_TELEMETRY_HEAP, heap);
   photonic_configure(ROCKET_VERTICAL_ACCEL_HISTORY, &vertical_accel_history);
+  photonic_configure(ROCKET_APOGEE_DETECTION_NEGLIGENCE, 0.15);
 
 #ifdef GROUND_TEST
   Serial.println("Computing ground pressure...");
@@ -224,6 +230,10 @@ void setup() {
 
   // Block until liftoff
   wait_for_liftoff();
+
+#ifdef GROUND_TEST
+  Serial.println("Liftoff detected!");
+#endif
 }
 
 void loop() {
@@ -257,7 +267,7 @@ void loop() {
 
     // Set up Verlet integrator
     struct InitializationData vint_data;
-    vint_data.initial_value = rocket_altitude;
+    vint_data.initial_value = launchpad_altitude + rocket_altitude;
     vint_data.start_time = t;
     vint_data.initial_velocity = rocket_velocity;
     VerletIntegrator vint = VerletIntegrator(vint_data);
@@ -266,8 +276,6 @@ void loop() {
     acalc_data.drag_coefficient = rocket_drag_coeff;
     acalc_data.radius = rocket_radius;
     acalc_data.base_mass = rocket_dry_mass;
-    acalc_data.air_density = igl_density(barometer->get_pressure() * 100, // mb -> pascals
-                                         barometer->get_temperature() + 273.15); // C -> K
 
     // Compute minimum altitude curve
     float rad_big = sqrt(rocket_radius * rocket_radius +
@@ -308,8 +316,9 @@ void loop() {
     // Offload buffer to Beta
     if (telemetry_logs_made == TELEMETRY_LOGS_BEFORE_OFFLOAD) {
       telemetry_logs_made = 0;
-      byte buffer[TELEMETRY_BUFFER_SIZE];
-      int buffer_ind = 0;
+      byte buffer[TELEMETRY_BUFFER_SIZE + 1];
+      buffer[0] = TELEMETRY_TOKEN_READINGS;
+      int buffer_ind = 1;
 
       // Compress buffer contents to float16
       for (int i = 0; i < TELEMETRY_BLOCKS; i++) {
@@ -325,7 +334,7 @@ void loop() {
       }
 
       // Send to Beta
-      Serial.write(buffer, TELEMETRY_BUFFER_SIZE);
+      TELEMETRY_SERIAL.write(buffer, TELEMETRY_BUFFER_SIZE);
     }
   }
 }
@@ -346,6 +355,34 @@ bool block_control() {
     event_apogee = check_for_apogee();
     if (event_apogee) {
       set_airbrake_extension(0);
+
+      // Send timestamp telemetry block to Beta
+      byte buffer[TELEMETRY_BUFFER_SIZE + 1];
+      buffer[0] = TELEMETRY_TOKEN_TIMESTAMPS;
+
+      // Zero the buffer
+      for (int i = 0; i < TELEMETRY_BUFFER_SIZE + 1; i++)
+        buffer[i] = 0;
+
+      // Compress and enbuffer time data
+      float16 t_ignition = Float16Compressor::compress(__rocket_ignition_time);
+      byte b0 = t_ignition & 0xFF;
+      byte b1 = (t_ignition >> 8) & 0xFF;
+      buffer[1] = b1;
+      buffer[2] = b0;
+      float16 t_burnout = Float16Compressor::compress(__rocket_burnout_time);
+      b0 = t_burnout & 0xFF;
+      b1 = (t_burnout >> 8) & 0xFF;
+      buffer[3] = b1;
+      buffer[4] = b0;
+      float16 t_apogee = Float16Compressor::compress(__rocket_apogee_time);
+      b0 = t_apogee & 0xFF;
+      b1 = (t_apogee >> 8) & 0xFF;
+      buffer[5] = b1;
+      buffer[6] = b0;
+
+      // Send to Beta
+      TELEMETRY_SERIAL.write(buffer, TELEMETRY_BUFFER_SIZE);
     }
   }
 
