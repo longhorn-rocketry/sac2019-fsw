@@ -1,6 +1,9 @@
 #include <Adafruit_GPS.h>
+#include <SD.h>
+#include <SPI.h>
 
-#define fc_serial Serial3
+#define GPS_SERIAL Serial3 // Communication with GPS
+#define TELEMETRY_SERIAL Serial2 // Incoming telemetry from Alpha
 #define XBEE_RES 2 // Set HIGH to reset XBEE OUTPUT
 #define XBEE_STAT 17 // XBee status pin INPUT
 #define XBEE_DTR 23 // XBee sleep control OUTPUT
@@ -18,11 +21,22 @@
 #define S4_E 27 // OUTPUT
 #define S5_E 28 // OUTPUT
 
-Adafruit_GPS gps(&fc_serial);
+#define CHIP_SELECT BUILTIN_SDCARD
+#define ALPHA_TELEMETRY_BUFFER_SIZE 900 // Size of buffer received from Alpha
+
+#define TELEMETRY_TOKEN_READINGS (byte)0
+#define TELEMETRY_TOKEN_TIMESTAMPS (byte)1
+
+Adafruit_GPS gps(&GPS_SERIAL);
 String gps_data[2];
+int telemetry_block_index = 0;
 
 void setup() {
-  Serial.println("Initializing hardware...");
+  Serial.begin(9600);
+	while (!Serial);
+  SD.begin(CHIP_SELECT);
+
+  /*Serial.println("Initializing hardware...");
 
   pinMode(XBEE_RES, OUTPUT);
   pinMode(XBEE_STAT, INPUT);
@@ -52,12 +66,52 @@ void setup() {
 
   gps.begin(9600);
   gps.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
-  gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+  gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);*/
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
 
+  // Store telemetry blocks received from Alpha
+  if (TELEMETRY_SERIAL.peek() != -1) {
+    byte token = TELEMETRY_SERIAL.read();
+
+    // Read telemetry block into local buffer
+    byte buffer[ALPHA_TELEMETRY_BUFFER_SIZE];
+    for (int i = 0; i < ALPHA_TELEMETRY_BUFFER_SIZE; i++)
+      buffer[i] = TELEMETRY_SERIAL.read();
+
+    // Dump buffer into a new block file
+    char *filename = nullptr;
+
+    // File name is based on token type for convenience
+    if (token == TELEMETRY_TOKEN_READINGS) {
+      filename = new char[7];
+      filename[0] = 'b';
+      filename[1] = 'l';
+      filename[2] = 'o';
+      filename[3] = 'c';
+      filename[4] = 'k';
+      filename[5] = 48 + telemetry_block_index;
+      filename[6] = 0;
+    } else if (token == TELEMETRY_TOKEN_TIMESTAMPS) {
+      filename = new char[6];
+      filename[0] = 't';
+      filename[1] = 'i';
+      filename[2] = 'm';
+      filename[3] = 'e';
+      filename[4] = 's';
+      filename[5] = 0;
+    }
+
+    File file = SD.open(filename, FILE_WRITE);
+    file.write(buffer, ALPHA_TELEMETRY_BUFFER_SIZE);
+
+    // Tidy up
+    file.close();
+    telemetry_block_index++;
+    if (filename != nullptr)
+      delete filename;
+  }
 }
 
 void read_gps() {
