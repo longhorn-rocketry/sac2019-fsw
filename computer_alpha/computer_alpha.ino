@@ -281,11 +281,13 @@ void loop() {
     float rad_big = sqrt(rocket_radius * rocket_radius +
                          rocket_airbrake_area / M_PI);
     acalc_data.radius = rad_big;
-    float alt_min = (float)vint.SimulateApogeeEuler(0.01, acalc_data);
+    float alt_min = (float)vint.SimulateApogeeEuler(0.01, acalc_data)
+        - launchpad_altitude;
 
     // Compute maximum altitude curve
     acalc_data.radius = rocket_radius;
-    float alt_max = (float)vint.SimulateApogeeEuler(0.01, acalc_data);
+    float alt_max = (float)vint.SimulateApogeeEuler(0.01, acalc_data)
+        - launchpad_altitude;
 
     telemetry_log.alt_min = alt_min;
     telemetry_log.alt_max = alt_max;
