@@ -411,6 +411,11 @@ bool block_control() {
       b1 = (t_apogee >> 8) & 0xFF;
       buffer[5] = b1;
       buffer[6] = b0;
+      float16 cd = Float16Compressor::compress(rocket_drag_coeff);
+      b0 = cd & 0xFF;
+      b1 = (cd >> 8) & 0xFF;
+      buffer[7] = b1;
+      buffer[8] = b0;
 
       // Send to Beta
       TELEMETRY_SERIAL.write(buffer, TELEMETRY_BUFFER_SIZE);
