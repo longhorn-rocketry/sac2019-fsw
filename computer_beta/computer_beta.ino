@@ -28,7 +28,7 @@
 #define TELEMETRY_TOKEN_TIMESTAMPS (byte)1
 
 Adafruit_GPS gps(&GPS_SERIAL);
-String gps_data[2];
+
 int telemetry_block_index = 0;
 
 void setup() {
@@ -36,27 +36,30 @@ void setup() {
 	while (!Serial);
   SD.begin(CHIP_SELECT);
 
-  /*Serial.println("Initializing hardware...");
+  Serial.println("Initializing hardware...");
 
+  // Configure GPS pins
   pinMode(XBEE_RES, OUTPUT);
   pinMode(XBEE_STAT, INPUT);
   pinMode(XBEE_DTR, OUTPUT);
   pinMode(XBEE_RTS, OUTPUT);
   pinMode(XBEE_CTS, INPUT);
   pinMode(XBEE_RSSI, INPUT);
+  digitalWrite(XBEE_RES, LOW);
 
   pinMode(GPS_PPS, INPUT);
   pinMode(GPS_FIX, INPUT);
   pinMode(GPS_EN, OUTPUT);
 
+  // Configure servo pins
   pinMode(S1_E, OUTPUT);
   pinMode(S2_E, OUTPUT);
   pinMode(S3_E, OUTPUT);
   pinMode(S4_E, OUTPUT);
   pinMode(S5_E, OUTPUT);
 
-  digitalWrite(XBEE_RES, LOW);
-  digitalWrite(S1_E, HIGH); // Set the servo power pins high whenever most of the other stuff is done initializing
+  // Raise servo lines high
+  digitalWrite(S1_E, HIGH);
   digitalWrite(S2_E, HIGH);
   digitalWrite(S3_E, HIGH);
   digitalWrite(S4_E, HIGH);
@@ -66,10 +69,12 @@ void setup() {
 
   gps.begin(9600);
   gps.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
-  gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);*/
+  gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
 }
 
 void loop() {
+  // Attempt a GPS read
+  read_gps();
 
   // Store telemetry blocks received from Alpha
   if (TELEMETRY_SERIAL.peek() != -1) {
@@ -114,21 +119,18 @@ void loop() {
   }
 }
 
+/**
+  @brief read NMEA sentences from GPS and write them to SD
+*/
 void read_gps() {
-  char c;
-  while (!gps.newNMEAreceived()) {
-    c = gps.read();
+  if (gps.newNMEAreceived()) {
+    char c = gps.read();
+
+    gps.parse(gps.lastNMEA());
+    String nmea = gps.lastNMEA() + "\n";
+
+    File file = SD.open("nmea", FILE_WRITE);
+    file.write(nmea.c_str(), nmea.length());
+    file.close();
   }
-
-  gps.parse(gps.lastNMEA());
-  String NMEA1 = gps.lastNMEA();
-
-  while (!gps.newNMEAreceived()) {
-    c = gps.read();
-  }
-  gps.parse(gps.lastNMEA());
-  String NMEA2 = gps.lastNMEA();
-
-  gps_data[0] = NMEA1;
-  gps_data[1] = NMEA2;
 }

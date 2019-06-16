@@ -29,17 +29,18 @@ namespace std {
 #define BZZR 15 // Buzzer OUTPUT
 #define AIRBRAKE_SERVO_MIN -1 // TODO
 #define AIRBRAKE_SERVO_MAX -1 // TODO
-#define GROUND_TEST // TODO: REMOVE BEFORE FLIGHT
+// #define GROUND_TEST // TODO: REMOVE BEFORE FLIGHT
 
 #define TELEMETRY_TOKEN_READINGS (byte)0
 #define TELEMETRY_TOKEN_TIMESTAMPS (byte)1
 
+#include "Servo.h"
 #include "torchy_imu.h"
 
 #include <aimbot.h>
 #include <memory>
 #include <photonic.h>
-#include <Servo.h>
+#include <Wire.h>
 
 using namespace photonic;
 
@@ -61,7 +62,7 @@ history<float> vertical_accel_history(HISTORY_SIZE);
 // Rocket parameters
 float rocket_drag_coeff = 0.46;
 float rocket_radius = 0.0762;
-float rocket_airbrake_area = 0.0036;
+float rocket_airbrake_area = 0.0762 * 0.02325 * 4;
 float rocket_dry_mass = 34.874;
 
 // Rocket state
@@ -272,22 +273,21 @@ void loop() {
     vint_data.initial_velocity = rocket_velocity;
     VerletIntegrator vint = VerletIntegrator(vint_data);
 
-    struct AccelerationCalculationData acalc_data;
-    acalc_data.drag_coefficient = rocket_drag_coeff;
-    acalc_data.radius = rocket_radius;
-    acalc_data.base_mass = rocket_dry_mass;
+    // Parameters for acceleration integration
+    struct AccelerationCalculationData acalc_params;
+    acalc_params.mass = rocket_dry_mass;
+    acalc_params.velocity = rocket_velocity;
+    acalc_params.altitude = launchpad_altitude + rocket_altitude;
+    acalc_params.altitude_initial = launchpad_altitude;
+    acalc_params.rocket_surface_area = 3.14159 * rocket_radius * rocket_radius;
+    acalc_params.airbrake_surface_area = 0;
+    acalc_params.rocket_cd = rocket_drag_coeff;
+    acalc_params.airbrake_cd = 1.28;
 
-    // Compute minimum altitude curve
-    float rad_big = sqrt(rocket_radius * rocket_radius +
-                         rocket_airbrake_area / M_PI);
-    acalc_data.radius = rad_big;
-    float alt_min = (float)vint.SimulateApogeeEuler(0.01, acalc_data)
-        - launchpad_altitude;
+    float alt_max = (float)vint.SimulateApogeeEuler(0.01, acalc_params);
 
-    // Compute maximum altitude curve
-    acalc_data.radius = rocket_radius;
-    float alt_max = (float)vint.SimulateApogeeEuler(0.01, acalc_data)
-        - launchpad_altitude;
+    acalc_params.airbrake_surface_area = rocket_airbrake_area;
+    float alt_min = (float)vint.SimulateApogeeEuler(0.01, acalc_params);
 
     telemetry_log.alt_min = alt_min;
     telemetry_log.alt_max = alt_max;
@@ -336,7 +336,7 @@ void loop() {
       }
 
       // Send to Beta
-      TELEMETRY_SERIAL.write(buffer, TELEMETRY_BUFFER_SIZE);
+      TELEMETRY_SERIAL.write(buffer, TELEMETRY_BUFFER_SIZE + 1);
     }
   }
 }
@@ -411,7 +411,7 @@ void update_sensors() {
 void set_airbrake_extension(float e) {
   int position = (int)(AIRBRAKE_SERVO_MIN +
       (AIRBRAKE_SERVO_MAX - AIRBRAKE_SERVO_MIN) * e);
-  servo1.write(position); // TODO: servo1?
+  servo1.write(position);
   telemetry_log.brake_extension = e;
 }
 
