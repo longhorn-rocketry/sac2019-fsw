@@ -38,6 +38,7 @@ namespace std {
 #include "torchy_imu.h"
 
 #include <aimbot.h>
+#include <density_calculator.h>
 #include <memory>
 #include <photonic.h>
 #include <Wire.h>
@@ -60,10 +61,14 @@ const int HISTORY_SIZE = 20;
 history<float> vertical_accel_history(HISTORY_SIZE);
 
 // Rocket parameters
-float rocket_drag_coeff = 0.46;
+const float T_DRAG_COEFF_CALC = 0.5;
+const float ROCKET_CD_OPENROCKET = 0.46;
+float rocket_drag_coeff = 0; // Populated by post-burnout Cd calculation
 float rocket_radius = 0.0762;
 float rocket_airbrake_area = 0.0762 * 0.02325 * 4;
 float rocket_dry_mass = 34.874;
+int rocket_cd_calculations = 0;
+bool rocket_cd_finalized = false;
 
 // Rocket state
 Metronome mtr_state_update(25); // 25 Hz
@@ -248,6 +253,24 @@ void loop() {
 
   float t = flight_time();
 
+  // Mid-flight Cd calculation
+  if (t < T_DRAG_COEFF_CALC) {
+    float a = vertical_accel_history[vertical_accel_history.get_index() - 1];
+    float rho = calculate_density(
+        launchpad_altitude,
+        launchpad_altitude + rocket_state[0][0]);
+    float v = rocket_state[1][0];
+    float A = rocket_radius * rocket_radius * 3.14159;
+    float g = -9.80665;
+    float m = rocket_dry_mass;
+    float cd = -2 * m * (a + g) / (A * rho * v * v);
+    rocket_cd_calculations++;
+    rocket_drag_coeff += cd;
+  } else if (!rocket_cd_finalized) {
+    rocket_cd_finalized = true;
+    rocket_drag_coeff /= rocket_cd_calculations;
+  }
+
   // Burnout and apogee detection
   bool block = block_control();
 
@@ -287,7 +310,7 @@ void loop() {
     acalc_params.altitude_initial = launchpad_altitude;
     acalc_params.rocket_surface_area = 3.14159 * rocket_radius * rocket_radius;
     acalc_params.airbrake_surface_area = 0;
-    acalc_params.rocket_cd = rocket_drag_coeff;
+    acalc_params.rocket_cd = (ROCKET_CD_OPENROCKET + rocket_drag_coeff) / 2;
     acalc_params.airbrake_cd = 1.28;
 
     float alt_max = (float)vint.SimulateApogeeEuler(0.01, acalc_params);
@@ -394,7 +417,7 @@ bool block_control() {
     }
   }
 
-  return !event_burnout || event_apogee;
+  return !event_burnout || event_apogee || flight_time() < T_DRAG_COEFF_CALC;
 }
 
 /**
