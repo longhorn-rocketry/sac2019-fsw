@@ -114,8 +114,14 @@ int telemetry_logs_made = 0;
 
 void setup() {
 #ifdef GROUND_TEST
+  Serial.begin(9600);
+  while (!Serial);
+
   Serial.println("Initializing hardware...");
 #endif
+
+  TELEMETRY_SERIAL.begin(9600);
+  while (!TELEMETRY_SERIAL);
 
   pinMode(LLC_OE, OUTPUT);
   pinMode(BNO055_INT, INPUT);

@@ -22,21 +22,34 @@
 #define S5_E 28 // OUTPUT
 
 #define CHIP_SELECT BUILTIN_SDCARD
-#define ALPHA_TELEMETRY_BUFFER_SIZE 900 // Size of buffer received from Alpha
+#define ALPHA_TELEMETRY_BUFFER_SIZE 1801 // Size of buffer received from Alpha
 
 #define TELEMETRY_TOKEN_READINGS (byte)0
 #define TELEMETRY_TOKEN_TIMESTAMPS (byte)1
+
+#define GROUND_TEST // TODO remove before flight
 
 Adafruit_GPS gps(&GPS_SERIAL);
 
 int telemetry_block_index = 0;
 
 void setup() {
+#ifdef GROUND_TEST
   Serial.begin(9600);
 	while (!Serial);
+#endif
+
+  GPS_SERIAL.begin(9600);
+  while (!GPS_SERIAL);
+
+  TELEMETRY_SERIAL.begin(9600);
+  while (!TELEMETRY_SERIAL);
+
   SD.begin(CHIP_SELECT);
 
+#ifdef GROUND_TEST
   Serial.println("Initializing hardware...");
+#endif
 
   // Configure GPS pins
   pinMode(XBEE_RES, OUTPUT);
@@ -65,7 +78,9 @@ void setup() {
   digitalWrite(S4_E, HIGH);
   digitalWrite(S5_E, HIGH);
 
+#ifdef GROUND_TEST
   Serial.println("Connecting to GPS...");
+#endif
 
   gps.begin(9600);
   gps.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
@@ -81,8 +96,8 @@ void loop() {
     byte token = TELEMETRY_SERIAL.read();
 
     // Read telemetry block into local buffer
-    byte buffer[ALPHA_TELEMETRY_BUFFER_SIZE];
-    for (int i = 0; i < ALPHA_TELEMETRY_BUFFER_SIZE; i++)
+    byte buffer[ALPHA_TELEMETRY_BUFFER_SIZE - 1];
+    for (int i = 0; i < ALPHA_TELEMETRY_BUFFER_SIZE - 1; i++)
       buffer[i] = TELEMETRY_SERIAL.read();
 
     // Dump buffer into a new block file
@@ -109,7 +124,7 @@ void loop() {
     }
 
     File file = SD.open(filename, FILE_WRITE);
-    file.write(buffer, ALPHA_TELEMETRY_BUFFER_SIZE);
+    file.write(buffer, ALPHA_TELEMETRY_BUFFER_SIZE - 1);
 
     // Tidy up
     file.close();
