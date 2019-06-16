@@ -63,6 +63,7 @@ history<float> vertical_accel_history(HISTORY_SIZE);
 // Rocket parameters
 const float T_DRAG_COEFF_CALC = 0.5;
 const float ROCKET_CD_OPENROCKET = 0.46;
+float rocket_nosecone_area = 0.245675;
 float rocket_drag_coeff = 0; // Populated by post-burnout Cd calculation
 float rocket_radius = 0.0762;
 float rocket_airbrake_area = 0.0762 * 0.02325 * 4;
@@ -260,7 +261,7 @@ void loop() {
         launchpad_altitude,
         launchpad_altitude + rocket_state[0][0]);
     float v = rocket_state[1][0];
-    float A = rocket_radius * rocket_radius * 3.14159;
+    float A = rocket_nosecone_area;
     float g = -9.80665;
     float m = rocket_dry_mass;
     float cd = -2 * m * (a + g) / (A * rho * v * v);
@@ -308,7 +309,7 @@ void loop() {
     acalc_params.velocity = rocket_velocity;
     acalc_params.altitude = launchpad_altitude + rocket_altitude;
     acalc_params.altitude_initial = launchpad_altitude;
-    acalc_params.rocket_surface_area = 3.14159 * rocket_radius * rocket_radius;
+    acalc_params.rocket_surface_area = rocket_nosecone_area;
     acalc_params.airbrake_surface_area = 0;
     acalc_params.rocket_cd = (ROCKET_CD_OPENROCKET + rocket_drag_coeff) / 2;
     acalc_params.airbrake_cd = 1.28;
