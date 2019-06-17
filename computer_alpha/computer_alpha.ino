@@ -176,7 +176,7 @@ void setup() {
   photonic_configure(ROCKET_IGNITION_G_TRIGGER, 3.0); // 3 Gs
   photonic_configure(ROCKET_NO_IGNITION_GRACE_PERIOD, 60.0 * 10); // Minimum 10 min before liftoff
   photonic_configure(ROCKET_MICROCONTROLLER, TEENSY_31);
-  photonic_configure(ROCKET_AUTOMATIC_BURNOUT, 5.0); // Burnout automatically declared after 5 s
+  photonic_configure(ROCKET_AUTOMATIC_BURNOUT, 7.0); // Burnout automatically declared after 5 s
   photonic_configure(ROCKET_PRIMARY_IMU, accelerometer);
   photonic_configure(ROCKET_PRIMARY_BAROMETER, barometer);
   photonic_configure(ROCKET_TELEMETRY_HEAP, heap);
@@ -256,7 +256,8 @@ void loop() {
 
   // Mid-flight Cd calculation
   if (t < T_DRAG_COEFF_CALC) {
-    float a = vertical_accel_history[vertical_accel_history.get_index() - 1];
+    float a =
+      vertical_accel_history[vertical_accel_history.get_index() - 1] * 9.80665;
     float rho = calculate_density(
         launchpad_altitude,
         launchpad_altitude + rocket_state[0][0]);
