@@ -1,6 +1,7 @@
 #include <Adafruit_GPS.h>
 #include <SD.h>
 #include <SPI.h>
+#include <TeensyThreads.h>
 
 #define GPS_SERIAL Serial3 // Communication with GPS
 #define TELEMETRY_SERIAL Serial2 // Incoming telemetry from Alpha
@@ -33,6 +34,8 @@ Adafruit_GPS gps(&GPS_SERIAL);
 
 int telemetry_block_index = 0;
 
+Threads::Mutex sd_in_use;
+
 void setup() {
 #ifdef GROUND_TEST
   Serial.begin(9600);
@@ -40,11 +43,7 @@ void setup() {
 #endif
 
   GPS_SERIAL.begin(9600);
-  while (!GPS_SERIAL);
-
-  TELEMETRY_SERIAL.begin(9600);
-  while (!TELEMETRY_SERIAL);
-
+  TELEMETRY_SERIAL.begin(115200);
   SD.begin(CHIP_SELECT);
 
 #ifdef GROUND_TEST
@@ -85,12 +84,12 @@ void setup() {
   gps.begin(9600);
   gps.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
   gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+
+  // Place GPS reads in a separate thread
+  threads.addThread(read_gps);
 }
 
 void loop() {
-  // Attempt a GPS read
-  read_gps();
-
   // Store telemetry blocks received from Alpha
   if (TELEMETRY_SERIAL.peek() != -1) {
     byte token = TELEMETRY_SERIAL.read();
@@ -123,6 +122,10 @@ void loop() {
       filename[5] = 0;
     }
 
+    // Wait until it's my turn to use the SD card
+    while (sd_in_use.getState());
+
+    sd_in_use.lock();
     File file = SD.open(filename, FILE_WRITE);
     file.write(buffer, ALPHA_TELEMETRY_BUFFER_SIZE - 1);
 
@@ -131,6 +134,7 @@ void loop() {
     telemetry_block_index++;
     if (filename != nullptr)
       delete filename;
+    sd_in_use.unlock();
   }
 }
 
@@ -138,14 +142,17 @@ void loop() {
   @brief read NMEA sentences from GPS and write them to SD
 */
 void read_gps() {
-  if (gps.newNMEAreceived()) {
-    char c = gps.read();
+  while (true) {
+    if (gps.newNMEAreceived()) {
+      String nmea = String(gps.lastNMEA()) + "\n";
 
-    gps.parse(gps.lastNMEA());
-    String nmea = gps.lastNMEA() + "\n";
+      while (sd_in_use.getState());
 
-    File file = SD.open("nmea", FILE_WRITE);
-    file.write(nmea.c_str(), nmea.length());
-    file.close();
+      sd_in_use.lock();
+      File file = SD.open("nmea", FILE_WRITE);
+      file.write(nmea.c_str(), nmea.length());
+      file.close();
+      sd_in_use.unlock();
+    }
   }
 }

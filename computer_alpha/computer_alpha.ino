@@ -126,8 +126,7 @@ void setup() {
   Serial.println("Initializing hardware...");
 #endif
 
-  TELEMETRY_SERIAL.begin(9600);
-  while (!TELEMETRY_SERIAL);
+  TELEMETRY_SERIAL.begin(115200);
 
   pinMode(LLC_OE, OUTPUT);
   pinMode(BNO055_INT, INPUT);
