@@ -176,6 +176,7 @@ void setup() {
   photonic_configure(ROCKET_NO_IGNITION_GRACE_PERIOD, 60.0 * 10); // Minimum 10 min before liftoff
   photonic_configure(ROCKET_MICROCONTROLLER, TEENSY_31);
   photonic_configure(ROCKET_AUTOMATIC_BURNOUT, 7.0); // Burnout automatically declared after 5 s
+  photonic_configure(ROCKET_AUTOMATIC_APOGEE, 120.0); // Apogee automatically declared after 120 s
   photonic_configure(ROCKET_PRIMARY_IMU, accelerometer);
   photonic_configure(ROCKET_PRIMARY_BAROMETER, barometer);
   photonic_configure(ROCKET_TELEMETRY_HEAP, heap);
