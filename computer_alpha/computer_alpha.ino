@@ -29,6 +29,7 @@ namespace std {
 #define BZZR 15 // Buzzer OUTPUT
 #define AIRBRAKE_SERVO_MIN -1 // TODO
 #define AIRBRAKE_SERVO_MAX -1 // TODO
+#define GRAVITY 9.80665
 // #define GROUND_TEST // TODO: REMOVE BEFORE FLIGHT
 
 #define TELEMETRY_TOKEN_READINGS (byte)0
@@ -257,13 +258,13 @@ void loop() {
   // Mid-flight Cd calculation
   if (t < T_DRAG_COEFF_CALC) {
     float a =
-      vertical_accel_history[vertical_accel_history.get_index() - 1] * 9.80665;
+      vertical_accel_history[vertical_accel_history.get_index() - 1] * GRAVITY; // Gs -> m/s^2
     float rho = calculate_density(
         launchpad_altitude,
         launchpad_altitude + rocket_state[0][0]);
     float v = rocket_state[1][0];
     float A = rocket_nosecone_area;
-    float g = -9.80665;
+    float g = -GRAVITY;
     float m = rocket_dry_mass;
     float cd = -2 * m * (a + g) / (A * rho * v * v);
     rocket_cd_calculations++;
@@ -281,7 +282,7 @@ void loop() {
     float s = hypso(p0,
                     barometer->get_pressure(),
                     barometer->get_temperature());
-    float a = accelerometer->get_acc_z();
+    float a = accelerometer->get_acc_z(); // m/s^2
     float mtr_dt = mtr_state_update.get_dt();
     float dt = mtr_dt == -1 ? mtr_state_update.get_wavelength() : mtr_dt;
     state_estimator.set_delta_t(dt);
@@ -435,7 +436,7 @@ void update_sensors() {
   barometer->update();
 
   float accel = accelerometer->get_acc_z();
-  vertical_accel_history.add(accel);
+  vertical_accel_history.add(accel / GRAVITY); // m/s^2 -> Gs
   telemetry_log.accel = accel;
 
   telemetry_log.pressure = barometer->get_pressure();
